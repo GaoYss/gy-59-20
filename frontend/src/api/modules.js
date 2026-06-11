@@ -27,5 +27,9 @@ export const makeupApi = {
 
 export const ruleApi = {
   list: () => api.get('/api/rules'),
-  update: (id, payload) => api.patch(`/api/rules/${id}`, payload)
+  update: (id, payload) => api.patch(`/api/rules/${id}`, payload),
+  impactPreview: (id, allowWeekend) =>
+    api.get(
+      `/api/rules/${id}/impact-preview${allowWeekend !== undefined ? `?allowWeekend=${allowWeekend}` : ''}`
+    )
 }

@@ -310,6 +310,132 @@ th {
   color: #8a5a00;
 }
 
+.legacy-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: #fff4d9;
+  color: #8a5a00;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid #f0d98b;
+}
+
+.weekend-impact-notice {
+  margin-bottom: 18px;
+}
+
+.weekend-impact-notice .impact-summary {
+  margin-bottom: 12px;
+}
+
+.weekend-impact-notice .impact-summary strong {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 16px;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 22px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
+}
+
+.modal-card h4 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: #111827;
+}
+
+.modal-card p {
+  margin: 0 0 14px;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.impact-summary {
+  background: #fff4d9;
+  border: 1px solid #f0d98b;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.impact-summary strong {
+  color: #8a5a00;
+  font-size: 18px;
+}
+
+.impact-detail-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #e5ebef;
+  border-radius: 6px;
+  margin-bottom: 18px;
+}
+
+.impact-detail-list table {
+  min-width: 0;
+}
+
+.impact-detail-list th,
+.impact-detail-list td {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-weight: 700;
+}
+
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 0;
+  background: #b42318;
+  color: #fff;
+  font-weight: 800;
+}
+
+.danger-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .message-bar {
   border-radius: 6px;
   padding: 10px 12px;

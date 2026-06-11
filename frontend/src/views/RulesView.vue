@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { Save } from 'lucide-vue-next'
+import { AlertTriangle, Save } from 'lucide-vue-next'
 
 import { ruleApi } from '../api/modules'
 import EmptyState from '../components/EmptyState.vue'
@@ -9,6 +9,26 @@ import MessageBar from '../components/MessageBar.vue'
 const rules = ref([])
 const savingId = ref(null)
 const message = reactive({ text: '', type: 'info' })
+
+const confirmModal = reactive({
+  open: false,
+  loading: false,
+  ruleId: null,
+  subject: '',
+  payload: null,
+  impact: {
+    affectedAppointments: 0,
+    totalActiveAppointments: 0,
+    weekendAppointments: 0,
+    affectedDetails: []
+  }
+})
+
+const weekendImpactNotice = reactive({
+  show: false,
+  message: '',
+  details: []
+})
 
 async function loadRules() {
   try {
@@ -19,28 +39,86 @@ async function loadRules() {
   }
 }
 
-async function saveRule(rule) {
-  savingId.value = rule.id
-  message.text = ''
+async function openWeekendConfirm(rule, finalPayload) {
+  confirmModal.open = true
+  confirmModal.loading = true
+  confirmModal.ruleId = rule.id
+  confirmModal.subject = rule.subject
+  confirmModal.payload = finalPayload
   try {
-    const updated = await ruleApi.update(rule.id, {
-      minIntervalDays: rule.minIntervalDays,
-      maxDailySlots: rule.maxDailySlots,
-      allowWeekend: rule.allowWeekend,
-      passingScore: rule.passingScore,
-      makeupWaitDays: rule.makeupWaitDays,
-      enabled: rule.enabled
-    })
+    const impact = await ruleApi.impactPreview(rule.id, false)
+    confirmModal.impact = impact
+  } catch (error) {
+    confirmModal.impact = {
+      affectedAppointments: 0,
+      totalActiveAppointments: 0,
+      weekendAppointments: 0,
+      affectedDetails: []
+    }
+  } finally {
+    confirmModal.loading = false
+  }
+}
+
+function closeConfirmModal() {
+  if (confirmModal.loading) return
+  confirmModal.open = false
+  confirmModal.ruleId = null
+  confirmModal.payload = null
+}
+
+async function confirmAndSave() {
+  if (!confirmModal.payload) return
+  const payload = confirmModal.payload
+  const ruleId = confirmModal.ruleId
+  closeConfirmModal()
+  await doSave(ruleId, payload)
+}
+
+async function doSave(ruleId, payload) {
+  const rule = rules.value.find((r) => r.id === ruleId)
+  savingId.value = ruleId
+  message.text = ''
+  weekendImpactNotice.show = false
+  try {
+    const updated = await ruleApi.update(ruleId, payload)
     const index = rules.value.findIndex((item) => item.id === updated.id)
-    rules.value[index] = updated
+    rules.value[index] = { ...rules.value[index], ...updated }
     message.text = `${updated.subject} 规则已保存`
     message.type = 'success'
+    if (updated.weekendImpact) {
+      weekendImpactNotice.show = true
+      weekendImpactNotice.message = updated.weekendImpact.message
+      weekendImpactNotice.details = updated.weekendImpact.affectedDetails || []
+    }
   } catch (error) {
     message.text = error.message
     message.type = 'error'
+    if (rule) {
+      rule.allowWeekend = true
+    }
   } finally {
     savingId.value = null
   }
+}
+
+async function saveRule(rule) {
+  const originalRule = (await ruleApi.list()).find((r) => r.id === rule.id)
+  const finalPayload = {
+    minIntervalDays: rule.minIntervalDays,
+    maxDailySlots: rule.maxDailySlots,
+    allowWeekend: rule.allowWeekend,
+    passingScore: rule.passingScore,
+    makeupWaitDays: rule.makeupWaitDays,
+    enabled: rule.enabled
+  }
+  const wasAllowed = originalRule ? originalRule.allowWeekend : true
+  const nowDisallowed = rule.allowWeekend === false
+  if (wasAllowed && nowDisallowed) {
+    await openWeekendConfirm(rule, finalPayload)
+    return
+  }
+  await doSave(rule.id, finalPayload)
 }
 
 onMounted(loadRules)
@@ -56,6 +134,35 @@ onMounted(loadRules)
     </div>
 
     <MessageBar :message="message.text" :type="message.type" />
+
+    <div v-if="weekendImpactNotice.show" class="weekend-impact-notice">
+      <div class="impact-summary">
+        <strong>{{ weekendImpactNotice.message }}</strong>
+      </div>
+      <div v-if="weekendImpactNotice.details.length > 0" class="impact-detail-list">
+        <table>
+          <thead>
+            <tr>
+              <th>学员</th>
+              <th>证件号</th>
+              <th>日期</th>
+              <th>时段</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="d in weekendImpactNotice.details" :key="d.id">
+              <td>{{ d.studentName }}</td>
+              <td>{{ d.idNumber }}</td>
+              <td>{{ d.examDate }}</td>
+              <td>{{ d.timeslot }}</td>
+              <td>{{ d.status }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <EmptyState v-if="rules.length === 0" title="暂无规则" description="后端初始化后会自动生成默认规则。" />
 
     <div class="rule-grid">
@@ -97,6 +204,64 @@ onMounted(loadRules)
           <span>{{ savingId === rule.id ? '保存中' : '保存规则' }}</span>
         </button>
       </article>
+    </div>
+
+    <div v-if="confirmModal.open" class="modal-overlay" @click.self="closeConfirmModal">
+      <div class="modal-card">
+        <h4 style="display:flex;align-items:center;gap:10px">
+          <AlertTriangle :size="22" color="#b42318" />
+          关闭周末预约确认
+        </h4>
+        <p>您即将为「{{ confirmModal.subject }}」关闭周末预约，以下是此次变更的影响分析：</p>
+
+        <div v-if="confirmModal.loading" class="impact-summary">
+          <span>正在统计受影响预约...</span>
+        </div>
+
+        <template v-else>
+          <div class="impact-summary">
+            <div>
+              当前共有 <strong>{{ confirmModal.impact.totalActiveAppointments }}</strong> 个有效预约，
+              其中周末预约 <strong>{{ confirmModal.impact.affectedAppointments }}</strong> 个。
+            </div>
+            <div style="margin-top:8px;font-size:13px;color:#8a5a00">
+              这些预约均为规则变更前创建，变更后<b>不会被取消</b>，但之后的新预约将不再允许选择周末日期。
+            </div>
+          </div>
+
+          <div v-if="confirmModal.impact.affectedDetails.length > 0" class="impact-detail-list">
+            <table>
+              <thead>
+                <tr>
+                  <th>学员</th>
+                  <th>证件号</th>
+                  <th>日期</th>
+                  <th>时段</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="d in confirmModal.impact.affectedDetails" :key="d.id">
+                  <td>{{ d.studentName }}</td>
+                  <td>{{ d.idNumber }}</td>
+                  <td>{{ d.examDate }}</td>
+                  <td>{{ d.timeslot }}</td>
+                  <td>{{ d.status }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" :disabled="confirmModal.loading" @click="closeConfirmModal">
+            取消
+          </button>
+          <button class="danger-button" type="button" :disabled="confirmModal.loading" @click="confirmAndSave">
+            确认关闭周末预约
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 </template>

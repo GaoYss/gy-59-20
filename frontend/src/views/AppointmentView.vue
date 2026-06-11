@@ -1,8 +1,8 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { CheckCircle2, RefreshCcw, Save } from 'lucide-vue-next'
 
-import { appointmentApi } from '../api/modules'
+import { appointmentApi, ruleApi } from '../api/modules'
 import DataTable from '../components/DataTable.vue'
 import EmptyState from '../components/EmptyState.vue'
 import MessageBar from '../components/MessageBar.vue'
@@ -10,6 +10,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import { appointmentStatuses, subjects, timeSlots } from '../constants/options'
 
 const appointments = ref([])
+const rules = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const message = reactive({ text: '', type: 'info' })
@@ -28,12 +29,42 @@ const columns = [
   { key: 'subject', label: '科目' },
   { key: 'examDate', label: '日期' },
   { key: 'timeslot', label: '时段' },
-  { key: 'status', label: '状态' }
+  { key: 'status', label: '状态' },
+  { key: 'ruleTag', label: '规则说明' }
 ]
+
+const subjectRuleMap = computed(() => {
+  const map = {}
+  for (const rule of rules.value) {
+    map[rule.subject] = rule
+  }
+  return map
+})
+
+const appointmentList = computed(() => {
+  return appointments.value.map((apt) => {
+    const currentRule = subjectRuleMap.value[apt.subject]
+    const examDateObj = new Date(apt.examDate)
+    const isWeekend = examDateObj.getDay() === 0 || examDateObj.getDay() === 6
+    const wasAllowedBySnapshot = apt.ruleAllowWeekend === true
+    const isNowDisallowed = currentRule && currentRule.allowWeekend === false
+    if (isWeekend && wasAllowedBySnapshot && isNowDisallowed) {
+      return { ...apt, ruleTag: 'legacy-weekend' }
+    }
+    return { ...apt, ruleTag: '' }
+  })
+})
 
 function setMessage(text, type = 'info') {
   message.text = text
   message.type = type
+}
+
+async function loadRules() {
+  try {
+    rules.value = await ruleApi.list()
+  } catch (error) {
+  }
 }
 
 async function loadAppointments() {
@@ -77,7 +108,10 @@ async function changeStatus(row, status) {
   }
 }
 
-onMounted(loadAppointments)
+onMounted(async () => {
+  await loadRules()
+  await loadAppointments()
+})
 </script>
 
 <template>
@@ -138,11 +172,11 @@ onMounted(loadAppointments)
       </div>
 
       <EmptyState
-        v-if="!loading && appointments.length === 0"
+        v-if="!loading && appointmentList.length === 0"
         title="暂无预约"
         description="提交预约后将在这里显示。"
       />
-      <DataTable v-else :columns="columns" :rows="appointments">
+      <DataTable v-else :columns="columns" :rows="appointmentList">
         <template #status="{ row }">
           <StatusBadge :status="row.status" />
         </template>
@@ -150,6 +184,12 @@ onMounted(loadAppointments)
           <select class="compact-select" :value="row.status" @change="changeStatus(row, $event.target.value)">
             <option v-for="status in appointmentStatuses" :key="status">{{ status }}</option>
           </select>
+        </template>
+        <template #ruleTag="{ row }">
+          <span v-if="row.ruleTag === 'legacy-weekend'" class="legacy-tag" title="此预约为规则允许周末时创建，规则变更后仍有效">
+            旧规则·周末
+          </span>
+          <span v-else style="color:#9ca3af;font-size:12px">-</span>
         </template>
       </DataTable>
     </section>
