@@ -9,6 +9,7 @@ import MessageBar from '../components/MessageBar.vue'
 const rules = ref([])
 const originalRules = ref([])
 const savingId = ref(null)
+const loadFailed = ref(false)
 const message = reactive({ text: '', type: 'info' })
 
 const confirmModal = reactive({
@@ -25,13 +26,34 @@ const confirmModal = reactive({
   }
 })
 
+function syncOriginalRule(ruleId, serverData) {
+  const fields = [
+    'id', 'subject', 'minIntervalDays', 'maxDailySlots',
+    'allowWeekend', 'passingScore', 'makeupWaitDays', 'enabled'
+  ]
+  const clean = {}
+  for (const f of fields) {
+    if (f in serverData) clean[f] = serverData[f]
+  }
+  const origIndex = originalRules.value.findIndex((r) => r.id === ruleId)
+  if (origIndex >= 0) {
+    originalRules.value[origIndex] = clean
+  }
+  const rulesIndex = rules.value.findIndex((r) => r.id === ruleId)
+  if (rulesIndex >= 0) {
+    rules.value[rulesIndex] = { ...rules.value[rulesIndex], ...clean }
+  }
+}
+
 async function loadRules() {
   try {
+    loadFailed.value = false
     const data = await ruleApi.list()
     rules.value = data
     originalRules.value = JSON.parse(JSON.stringify(data))
   } catch (error) {
-    message.text = error.message
+    loadFailed.value = true
+    message.text = '规则加载失败，请检查网络后刷新页面重试'
     message.type = 'error'
   }
 }
@@ -59,8 +81,9 @@ function openWeekendConfirm(rule, finalPayload) {
 function closeConfirmModal() {
   if (confirmModal.loading) return
   const rule = rules.value.find((r) => r.id === confirmModal.ruleId)
-  if (rule) {
-    rule.allowWeekend = true
+  const original = originalRules.value.find((r) => r.id === confirmModal.ruleId)
+  if (rule && original) {
+    rule.allowWeekend = original.allowWeekend
   }
   confirmModal.open = false
   confirmModal.ruleId = null
@@ -82,12 +105,7 @@ async function doSave(ruleId, payload) {
   message.text = ''
   try {
     const updated = await ruleApi.update(ruleId, payload)
-    const index = rules.value.findIndex((item) => item.id === updated.id)
-    rules.value[index] = { ...rules.value[index], ...updated }
-    const origIndex = originalRules.value.findIndex((item) => item.id === updated.id)
-    if (origIndex >= 0) {
-      originalRules.value[origIndex] = { ...originalRules.value[origIndex], ...updated }
-    }
+    syncOriginalRule(ruleId, updated)
     message.text = `${updated.subject} 规则已保存`
     message.type = 'success'
   } catch (error) {
@@ -131,9 +149,18 @@ onMounted(loadRules)
 
     <MessageBar :message="message.text" :type="message.type" />
 
-    <EmptyState v-if="rules.length === 0" title="暂无规则" description="后端初始化后会自动生成默认规则。" />
+    <EmptyState
+      v-if="loadFailed"
+      title="规则加载失败"
+      description="无法获取规则数据，请检查网络后刷新页面重试。"
+    />
+    <EmptyState
+      v-else-if="rules.length === 0"
+      title="暂无规则"
+      description="后端初始化后会自动生成默认规则。"
+    />
 
-    <div class="rule-grid">
+    <div v-if="!loadFailed && rules.length > 0" class="rule-grid">
       <article v-for="rule in rules" :key="rule.id" class="rule-card">
         <div class="rule-title">
           <h4>{{ rule.subject }}</h4>
