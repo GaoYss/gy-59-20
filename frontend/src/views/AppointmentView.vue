@@ -11,6 +11,8 @@ import { appointmentStatuses, subjects, timeSlots } from '../constants/options'
 
 const appointments = ref([])
 const rules = ref([])
+const rulesLoaded = ref(false)
+const rulesLoadFailed = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const message = reactive({ text: '', type: 'info' })
@@ -55,6 +57,11 @@ const appointmentList = computed(() => {
   })
 })
 
+const rulesLoadFailedMsg = computed(() => {
+  if (!rulesLoadFailed.value) return ''
+  return '规则加载失败，无法识别旧规则周末预约，请检查网络后刷新页面'
+})
+
 function setMessage(text, type = 'info') {
   message.text = text
   message.type = type
@@ -62,8 +69,13 @@ function setMessage(text, type = 'info') {
 
 async function loadRules() {
   try {
+    rulesLoadFailed.value = false
     rules.value = await ruleApi.list()
+    rulesLoaded.value = true
   } catch (error) {
+    rulesLoadFailed.value = true
+    rulesLoaded.value = false
+    setMessage('规则加载失败，无法识别旧规则周末预约，请检查网络后刷新页面', 'error')
   }
 }
 
@@ -188,6 +200,9 @@ onMounted(async () => {
         <template #ruleTag="{ row }">
           <span v-if="row.ruleTag === 'legacy-weekend'" class="legacy-tag" title="此预约为规则允许周末时创建，规则变更后仍有效">
             旧规则·周末
+          </span>
+          <span v-else-if="rulesLoadFailed" style="color:#d97706;font-size:12px" title="规则加载失败，无法判断是否为旧规则周末预约">
+            规则未加载
           </span>
           <span v-else style="color:#9ca3af;font-size:12px">-</span>
         </template>

@@ -83,7 +83,12 @@ function closeConfirmModal() {
   const rule = rules.value.find((r) => r.id === confirmModal.ruleId)
   const original = originalRules.value.find((r) => r.id === confirmModal.ruleId)
   if (rule && original) {
+    rule.minIntervalDays = original.minIntervalDays
+    rule.maxDailySlots = original.maxDailySlots
     rule.allowWeekend = original.allowWeekend
+    rule.passingScore = original.passingScore
+    rule.makeupWaitDays = original.makeupWaitDays
+    rule.enabled = original.enabled
   }
   confirmModal.open = false
   confirmModal.ruleId = null
