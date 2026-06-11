@@ -7,6 +7,7 @@ import EmptyState from '../components/EmptyState.vue'
 import MessageBar from '../components/MessageBar.vue'
 
 const rules = ref([])
+const originalRules = ref([])
 const savingId = ref(null)
 const message = reactive({ text: '', type: 'info' })
 
@@ -24,44 +25,43 @@ const confirmModal = reactive({
   }
 })
 
-const weekendImpactNotice = reactive({
-  show: false,
-  message: '',
-  details: []
-})
-
 async function loadRules() {
   try {
-    rules.value = await ruleApi.list()
+    const data = await ruleApi.list()
+    rules.value = data
+    originalRules.value = JSON.parse(JSON.stringify(data))
   } catch (error) {
     message.text = error.message
     message.type = 'error'
   }
 }
 
-async function openWeekendConfirm(rule, finalPayload) {
+function openWeekendConfirm(rule, finalPayload) {
   confirmModal.open = true
   confirmModal.loading = true
   confirmModal.ruleId = rule.id
   confirmModal.subject = rule.subject
   confirmModal.payload = finalPayload
-  try {
-    const impact = await ruleApi.impactPreview(rule.id, false)
-    confirmModal.impact = impact
-  } catch (error) {
-    confirmModal.impact = {
-      affectedAppointments: 0,
-      totalActiveAppointments: 0,
-      weekendAppointments: 0,
-      affectedDetails: []
-    }
-  } finally {
-    confirmModal.loading = false
+  confirmModal.impact = {
+    affectedAppointments: 0,
+    totalActiveAppointments: 0,
+    weekendAppointments: 0,
+    affectedDetails: []
   }
+  ruleApi.impactPreview(rule.id, false).then((impact) => {
+    confirmModal.impact = impact
+  }).catch(() => {
+  }).finally(() => {
+    confirmModal.loading = false
+  })
 }
 
 function closeConfirmModal() {
   if (confirmModal.loading) return
+  const rule = rules.value.find((r) => r.id === confirmModal.ruleId)
+  if (rule) {
+    rule.allowWeekend = true
+  }
   confirmModal.open = false
   confirmModal.ruleId = null
   confirmModal.payload = null
@@ -71,39 +71,35 @@ async function confirmAndSave() {
   if (!confirmModal.payload) return
   const payload = confirmModal.payload
   const ruleId = confirmModal.ruleId
-  closeConfirmModal()
+  confirmModal.open = false
+  confirmModal.ruleId = null
+  confirmModal.payload = null
   await doSave(ruleId, payload)
 }
 
 async function doSave(ruleId, payload) {
-  const rule = rules.value.find((r) => r.id === ruleId)
   savingId.value = ruleId
   message.text = ''
-  weekendImpactNotice.show = false
   try {
     const updated = await ruleApi.update(ruleId, payload)
     const index = rules.value.findIndex((item) => item.id === updated.id)
     rules.value[index] = { ...rules.value[index], ...updated }
+    const origIndex = originalRules.value.findIndex((item) => item.id === updated.id)
+    if (origIndex >= 0) {
+      originalRules.value[origIndex] = { ...originalRules.value[origIndex], ...updated }
+    }
     message.text = `${updated.subject} 规则已保存`
     message.type = 'success'
-    if (updated.weekendImpact) {
-      weekendImpactNotice.show = true
-      weekendImpactNotice.message = updated.weekendImpact.message
-      weekendImpactNotice.details = updated.weekendImpact.affectedDetails || []
-    }
   } catch (error) {
     message.text = error.message
     message.type = 'error'
-    if (rule) {
-      rule.allowWeekend = true
-    }
   } finally {
     savingId.value = null
   }
 }
 
-async function saveRule(rule) {
-  const originalRule = (await ruleApi.list()).find((r) => r.id === rule.id)
+function saveRule(rule) {
+  const originalRule = originalRules.value.find((r) => r.id === rule.id)
   const finalPayload = {
     minIntervalDays: rule.minIntervalDays,
     maxDailySlots: rule.maxDailySlots,
@@ -115,10 +111,10 @@ async function saveRule(rule) {
   const wasAllowed = originalRule ? originalRule.allowWeekend : true
   const nowDisallowed = rule.allowWeekend === false
   if (wasAllowed && nowDisallowed) {
-    await openWeekendConfirm(rule, finalPayload)
+    openWeekendConfirm(rule, finalPayload)
     return
   }
-  await doSave(rule.id, finalPayload)
+  doSave(rule.id, finalPayload)
 }
 
 onMounted(loadRules)
@@ -134,34 +130,6 @@ onMounted(loadRules)
     </div>
 
     <MessageBar :message="message.text" :type="message.type" />
-
-    <div v-if="weekendImpactNotice.show" class="weekend-impact-notice">
-      <div class="impact-summary">
-        <strong>{{ weekendImpactNotice.message }}</strong>
-      </div>
-      <div v-if="weekendImpactNotice.details.length > 0" class="impact-detail-list">
-        <table>
-          <thead>
-            <tr>
-              <th>学员</th>
-              <th>证件号</th>
-              <th>日期</th>
-              <th>时段</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="d in weekendImpactNotice.details" :key="d.id">
-              <td>{{ d.studentName }}</td>
-              <td>{{ d.idNumber }}</td>
-              <td>{{ d.examDate }}</td>
-              <td>{{ d.timeslot }}</td>
-              <td>{{ d.status }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
 
     <EmptyState v-if="rules.length === 0" title="暂无规则" description="后端初始化后会自动生成默认规则。" />
 

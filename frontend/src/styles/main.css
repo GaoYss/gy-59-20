@@ -323,19 +323,6 @@ th {
   border: 1px solid #f0d98b;
 }
 
-.weekend-impact-notice {
-  margin-bottom: 18px;
-}
-
-.weekend-impact-notice .impact-summary {
-  margin-bottom: 12px;
-}
-
-.weekend-impact-notice .impact-summary strong {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
 .modal-overlay {
   position: fixed;
   inset: 0;
