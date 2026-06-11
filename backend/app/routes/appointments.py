@@ -19,19 +19,19 @@ def validate_appointment(payload):
     required = ["studentName", "idNumber", "subject", "examDate", "timeslot"]
     missing = [field for field in required if not payload.get(field)]
     if missing:
-        return f"缺少字段：{', '.join(missing)}", None
+        return f"缺少字段：{', '.join(missing)}", None, None
 
     exam_date = parse_exam_date(payload.get("examDate"))
     if not exam_date:
-        return "考试日期格式应为 YYYY-MM-DD", None
+        return "考试日期格式应为 YYYY-MM-DD", None, None
     if exam_date < date.today():
-        return "不能预约过去日期", None
+        return "不能预约过去日期", None, None
 
     rule = Rule.query.filter_by(subject=payload["subject"]).first()
     if not rule or not rule.enabled:
-        return "该科目暂未开放预约", None
+        return "该科目暂未开放预约", None, None
     if exam_date.weekday() >= 5 and not rule.allow_weekend:
-        return "该科目规则不允许周末预约", None
+        return "该科目规则不允许周末预约", None, None
 
     daily_count = Appointment.query.filter(
         Appointment.subject == payload["subject"],
@@ -39,11 +39,11 @@ def validate_appointment(payload):
         Appointment.status.in_(["已预约", "已确认"]),
     ).count()
     if daily_count >= rule.max_daily_slots:
-        return "当日该科目预约名额已满", None
+        return "当日该科目预约名额已满", None, None
 
     earliest_date = date.today() + timedelta(days=rule.min_interval_days)
     if exam_date < earliest_date:
-        return f"该科目需至少提前 {rule.min_interval_days} 天预约", None
+        return f"该科目需至少提前 {rule.min_interval_days} 天预约", None, None
 
     active = Appointment.query.filter(
         Appointment.id_number == payload["idNumber"],
@@ -51,9 +51,9 @@ def validate_appointment(payload):
         Appointment.status.in_(["已预约", "已确认"]),
     ).first()
     if active:
-        return "该学员已有同科目有效预约", None
+        return "该学员已有同科目有效预约", None, None
 
-    return None, exam_date
+    return None, exam_date, rule
 
 
 @appointments_bp.get("")
@@ -71,7 +71,7 @@ def list_appointments():
 @appointments_bp.post("")
 def create_appointment():
     payload = request.get_json() or {}
-    error, exam_date = validate_appointment(payload)
+    error, exam_date, rule = validate_appointment(payload)
     if error:
         return jsonify({"message": error}), 400
 
@@ -82,6 +82,9 @@ def create_appointment():
         exam_date=exam_date,
         timeslot=payload["timeslot"],
         status="已预约",
+        rule_allow_weekend=rule.allow_weekend,
+        rule_max_daily_slots=rule.max_daily_slots,
+        rule_min_interval_days=rule.min_interval_days,
     )
     db.session.add(appointment)
     db.session.commit()

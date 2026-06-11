@@ -39,9 +39,12 @@ class Appointment(db.Model):
     timeslot = db.Column(db.String(20), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="已预约")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    rule_allow_weekend = db.Column(db.Boolean, nullable=True)
+    rule_max_daily_slots = db.Column(db.Integer, nullable=True)
+    rule_min_interval_days = db.Column(db.Integer, nullable=True)
 
     def to_dict(self):
-        return {
+        data = {
             "id": self.id,
             "studentName": self.student_name,
             "idNumber": self.id_number,
@@ -51,6 +54,13 @@ class Appointment(db.Model):
             "status": self.status,
             "createdAt": self.created_at.isoformat(timespec="seconds"),
         }
+        if self.rule_allow_weekend is not None:
+            data["ruleAllowWeekend"] = self.rule_allow_weekend
+        if self.rule_max_daily_slots is not None:
+            data["ruleMaxDailySlots"] = self.rule_max_daily_slots
+        if self.rule_min_interval_days is not None:
+            data["ruleMinIntervalDays"] = self.rule_min_interval_days
+        return data
 
 
 class ExamQuestion(db.Model):
